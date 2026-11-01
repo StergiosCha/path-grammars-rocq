@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this development, please cite the paper and this software."
+title: "Path Grammars: Rocq development"
+type: software
+license: MIT
+authors:
+  - family-names: Talman
+    given-names: Aarne
+    affiliation: "University of Helsinki"
+  - family-names: Chatzikyriakidis
+    given-names: Stergios
+    affiliation: "Institute for Language and Speech Processing, Athena Research Center"
+keywords:
+  - path grammars
+  - context-free grammars
+  - linear indexed grammars
+  - Rocq
+  - Coq
+  - mechanised proofs

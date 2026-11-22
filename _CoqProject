@@ -4,3 +4,4 @@ ExtendedPathGrammars.v
 IndexedPathGrammars.v
 CrossSerial.v
 LIGNormalForm.v
+Doubling.v

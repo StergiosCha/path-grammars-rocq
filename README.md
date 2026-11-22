@@ -16,7 +16,9 @@ Six files, using only the standard library:
   - Equivalence with normal-form Linear Indexed Grammars (Theorem 11).
   - Incrementality (Corollary 12).
 - `LIGNormalForm.v`: the LIG normal form (Lemma 10). Every LIG language is an IPG language.
-- `Doubling.v`: host copying makes structure diverge from the string (Corollary 9). The language is a r*, and the term built for a rⁿ has 2ⁿ occurrences of a.
+- `Doubling.v`: host copying makes structure diverge from the string (Corollary 9).
+  - The language is a r*, and the term built for a rⁿ has 2ⁿ occurrences of a.
+  - Each a rⁿ has exactly one term, and the numbers of a in the expanded yields are exactly the powers of two, which are not ultimately periodic (`unique_output`, `exact_projection`, `not_ultimately_periodic`, contributed by Stergios Chatzikyriakidis).
 - `CrossSerial.v`: the grammar of Example 5 generates exactly { aⁿbᵐcⁿdᵐ | n, m ≥ 1 } (Proposition 14, language part).
 
 Written for Coq 8.18; the system has since been renamed Rocq. To check the proofs:
@@ -32,6 +34,6 @@ The development contains no `Admitted` and no axioms beyond those of the core lo
 
 Not mechanised:
 - the non-context-freeness of aⁿbᵐcⁿdᵐ (pumping lemma) and the dependency alignment in Proposition 14;
-- the final step of Corollary 9: {a^(2ⁿ)} is not semilinear, hence not a multiple context-free language;
+- the final step of Corollary 9: from the failure of ultimate periodicity, via the semilinearity of multiple context-free languages, to {a^(2ⁿ)} not being an MCFL;
 - the cited results (parsing complexity, the equivalence of LIG with TAG, CCG and Head Grammar, mildly context-sensitive properties);
 - the standard link between the rewriting definitions of CFGs and LIGs and the tree-based predicates used here.

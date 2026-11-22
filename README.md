@@ -1,33 +1,34 @@
-# Path Grammars: Rocq development
+# Rocq development for "Parsing as Path-Finding: A Stack-Based Grammar for Incremental Syntax"
 
-Machine-checked proofs for the paper
+Five files, using only the standard library:
 
-> Aarne Talman and Stergios Chatzikyriakidis. *Parsing as Path-Finding: A Stack-Based Grammar for Incremental Syntax.* Submitted to the International Journal of Foundations of Computer Science.
+- `PathGrammars.v`: basic Path Grammars.
+  - Equivalence with CNF context-free grammars (Theorem 2, Corollary 3) and the mutually inverse translations.
+  - The recursive form of Proposition 1.
+  - Incrementality, including nested sub-derivations (Corollary 4).
+  - The flattened stack machine of Remark 1, proved equivalent to the rewrite semantics.
+- `ExtendedPathGrammars.v`: slashed categories and LINK structures.
+  - Weak context-freeness (Theorem 5) and ε-freeness (Corollary 6).
+  - The tree-level characterisation (Theorem 7) and the unique-gap property.
+  - Incrementality with pending fillers (Corollary 8).
+  - The binding example (4).
+- `IndexedPathGrammars.v`: Indexed Path Grammars.
+  - Equivalence with normal-form Linear Indexed Grammars (Theorem 10).
+  - Incrementality (Corollary 11).
+- `LIGNormalForm.v`: the LIG normal form (Lemma 9). Every LIG language is an IPG language.
+- `CrossSerial.v`: the grammar of Example 5 generates exactly { aⁿbᵐcⁿdᵐ | n, m ≥ 1 } (Proposition 13, language part).
 
-## Contents
+Written for Coq 8.18; the system has since been renamed Rocq. To check the proofs:
 
-| File | Results |
-|---|---|
-| `PathGrammars.v` | Basic Path Grammars derive exactly the derivation trees of their underlying CNF context-free grammar, and the emitted string is the yield of the tree built (Theorem 2, Corollaries 3 and 4). |
-| `ExtendedPathGrammars.v` | Path Grammars with slashed categories and LINK structures generate context-free languages (Theorem 5). |
-| `IndexedPathGrammars.v` | Indexed Path Grammars derive exactly the derivation trees of normal-form Linear Indexed Grammars, and conversely (Theorem 8). |
+    coqc PathGrammars.v
+    coqc ExtendedPathGrammars.v
+    coqc IndexedPathGrammars.v
+    coqc -Q . "" CrossSerial.v
+    coqc -Q . "" LIGNormalForm.v
 
-Each file depends only on the standard library (`List`). The development contains no `Admitted` and no axioms beyond those of the core logic. The normal-form construction for LIGs and the cited equivalence of LIG with TAG and CCG are not mechanised.
+The development contains no `Admitted` and no axioms beyond those of the core logic.
 
-## Checking the proofs
-
-The files were written for Coq 8.18 (the system has since been renamed Rocq).
-
-    coqc PathGrammars.v ExtendedPathGrammars.v IndexedPathGrammars.v
-
-or, with the included project file,
-
-    coq_makefile -f _CoqProject -o Makefile && make
-
-## How it was made
-
-The mechanisation was developed by the authors in collaboration with an AI assistant (Claude, Anthropic). The authors checked the definitions against the paper, and every theorem is verified by the proof checker.
-
-## License
-
-MIT, see `LICENSE`.
+Not mechanised:
+- the non-context-freeness of aⁿbᵐcⁿdᵐ (pumping lemma) and the dependency alignment in Proposition 13;
+- the cited results (parsing complexity, the equivalence of LIG with TAG, CCG and Head Grammar, mildly context-sensitive properties);
+- the standard link between the rewriting definitions of CFGs and LIGs and the tree-based predicates used here.

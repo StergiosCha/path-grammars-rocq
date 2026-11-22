@@ -220,7 +220,7 @@ Proof.
   inversion Hn; subst. rewrite !app_nil_r in *. simpl. subst. exact Ha.
 Qed.
 
-(* Theorem 4 (strong form). *)
+(* IPG/LIG correspondence (strong form). *)
 Theorem ipg_lig_equivalence : forall c w t,
   derives ([], FNT c) w ([], FT t) <-> lig_der c w t.
 Proof.
@@ -231,10 +231,151 @@ Corollary ipg_incremental_order : forall c w t,
   derives ([], FNT c) w ([], FT t) -> yield t = w.
 Proof. intros. eapply lig_der_yield. apply ipg_to_lig. eassumption. Qed.
 
+(* Item completion for IPGs. *)
+Corollary ipg_item_completion : forall c s T,
+  derives c s ([], FT T) -> content c s T.
+Proof.
+  intros c s T H. rewrite <- (app_nil_r s).
+  apply (derives_content _ _ _ H). exists []. split; [constructor | reflexivity].
+Qed.
+
 Corollary ipg_weak_equivalence : forall S w, ipg_language S w <-> lig_language S w.
 Proof.
   intros S w; split; intros [t H]; exists t; apply ipg_lig_equivalence; exact H.
 Qed.
+
+(* ===================================================================== *)
+(*  Flattened derivations and nested item completion for IPGs.           *)
+(* ===================================================================== *)
+
+Inductive frame : Type := Fr : list cat -> term -> frame.
+
+Definition config : Type := (list frame * item)%type.
+
+Inductive mstep : config -> list terminal -> config -> Prop :=
+  | m_binp : forall F X A B C ix, In (IBinP A B C) R ->
+      mstep (F, (X, FNT (A, ix))) [] (F, ((B, []) :: X, FNT (C, ix)))
+  | m_bind : forall F X A B C ix, In (IBinD A B C) R ->
+      mstep (F, (X, FNT (A, ix))) [] (F, ((B, ix) :: X, FNT (C, [])))
+  | m_push : forall F X A i C ix, In (IPush A i C) R ->
+      mstep (F, (X, FNT (A, ix))) [] (F, (X, FNT (C, i :: ix)))
+  | m_pop : forall F X A i C ix, In (IPop A i C) R ->
+      mstep (F, (X, FNT (A, i :: ix))) [] (F, (X, FNT (C, ix)))
+  | m_chain : forall F X A C ix, In (IChain A C) R ->
+      mstep (F, (X, FNT (A, ix))) [] (F, (X, FNT (C, ix)))
+  | m_term : forall F X A o, In (ITerm A o) R ->
+      mstep (F, (X, FNT (A, []))) (emit o) (F, (X, FT (Leaf o)))
+  | m_call : forall F X B t,
+      mstep (F, (B :: X, FT t)) [] (Fr X t :: F, ([], FNT B))
+  | m_ret : forall F X t tB,
+      mstep (Fr X t :: F, ([], FT tB)) [] (F, (X, FT (Node t tB))).
+
+Inductive msteps : config -> list terminal -> config -> Prop :=
+  | ms_refl : forall k, msteps k [] k
+  | ms_step : forall k1 s1 k2 s2 k3,
+      mstep k1 s1 k2 -> msteps k2 s2 k3 -> msteps k1 (s1 ++ s2) k3.
+
+Lemma msteps_trans : forall k1 s1 k2 s2 k3,
+  msteps k1 s1 k2 -> msteps k2 s2 k3 -> msteps k1 (s1 ++ s2) k3.
+Proof.
+  intros k1 s1 k2 s2 k3 H1 H2. induction H1.
+  - exact H2.
+  - rewrite <- app_assoc. eapply ms_step; eauto.
+Qed.
+
+Lemma ms_one : forall k1 k2 s k3, mstep k1 [] k2 -> msteps k2 s k3 -> msteps k1 s k3.
+Proof. intros. change s with ([] ++ s). eapply ms_step; eauto. Qed.
+
+Lemma derives_to_machine : forall c s c',
+  derives c s c' -> forall F, msteps (F, c) s (F, c').
+Proof.
+  intros c s c' H; induction H; intros F.
+  - apply ms_refl.
+  - eapply ms_one; [apply m_binp; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_bind; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_push; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_pop; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_chain; eassumption | apply IHderives].
+  - eapply ms_step; [apply m_term; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_call |].
+    eapply msteps_trans; [apply IHderives1 |].
+    eapply ms_one; [apply m_ret | apply IHderives2].
+Qed.
+
+Fixpoint gcontent (F : list frame) (c : item) (w : list terminal) (T : term) : Prop :=
+  match F with
+  | [] => content c w T
+  | Fr X t :: F' => exists w1 w2 tB,
+      w = w1 ++ w2 /\ content c w1 tB /\ gcontent F' (X, FT (Node t tB)) w2 T
+  end.
+
+Lemma gcontent_lift : forall c c' s,
+  (forall w T, content c' w T -> content c (s ++ w) T) ->
+  forall F w T, gcontent F c' w T -> gcontent F c (s ++ w) T.
+Proof.
+  intros c c' s Hl F w T. destruct F as [| [X t] F']; simpl.
+  - apply Hl.
+  - intros [w1 [w2 [tB [E [Hc Hg]]]]].
+    exists (s ++ w1), w2, tB. repeat split; auto.
+    rewrite E. apply app_assoc.
+Qed.
+
+Lemma local_lift : forall c s c',
+  derives c s c' -> forall F w T, gcontent F c' w T -> gcontent F c (s ++ w) T.
+Proof. intros c s c' H. apply gcontent_lift. apply derives_content. exact H. Qed.
+
+Lemma content_nil_nt : forall b s tB, content ([], FNT b) s tB -> lig_der b s tB.
+Proof.
+  intros b s tB [w1 [w2 [ta [ts [Hw [Ha [Hn HT]]]]]]].
+  inversion Hn; subst. rewrite !app_nil_r in *. simpl. exact Ha.
+Qed.
+
+Lemma mstep_gcontent : forall k s k',
+  mstep k s k' -> forall w T, gcontent (fst k') (snd k') w T -> gcontent (fst k) (snd k) (s ++ w) T.
+Proof.
+  intros k s k' H; inversion H; subst; cbn [fst snd]; intros w T Hg.
+  - eapply local_lift; [eapply d_binp; [exact H0 | apply d_refl] | exact Hg].
+  - eapply local_lift; [eapply d_bind; [exact H0 | apply d_refl] | exact Hg].
+  - eapply local_lift; [eapply d_push; [exact H0 | apply d_refl] | exact Hg].
+  - eapply local_lift; [eapply d_pop; [exact H0 | apply d_refl] | exact Hg].
+  - eapply local_lift; [eapply d_chain; [exact H0 | apply d_refl] | exact Hg].
+  - rewrite <- (app_nil_r (emit o)) at 1.
+    eapply local_lift; [eapply d_term; [exact H0 | apply d_refl] | exact Hg].
+  - simpl in Hg. destruct Hg as [w1 [w2 [tB [E [Hc Hg]]]]]. subst. simpl.
+    eapply gcontent_lift with (s := w1); [| exact Hg].
+    intros w' T' [ts [Hs HT]]. exists (tB :: ts). split.
+    + constructor; [apply content_nil_nt; exact Hc | exact Hs].
+    + exact HT.
+  - simpl. exists [], w, tB. repeat split.
+    + exists []. split; [constructor | reflexivity].
+    + exact Hg.
+Qed.
+
+Lemma msteps_gcontent : forall k s k',
+  msteps k s k' -> forall w T, gcontent (fst k') (snd k') w T -> gcontent (fst k) (snd k) (s ++ w) T.
+Proof.
+  intros k s k' H; induction H; intros w T Hg.
+  - exact Hg.
+  - rewrite <- app_assoc. eapply mstep_gcontent; [exact H | apply IHmsteps; exact Hg].
+Qed.
+
+(* Nested item completion for IPGs (Corollary 11). *)
+Corollary ipg_nested_item_completion : forall k s T,
+  msteps k s ([], ([], FT T)) -> gcontent (fst k) (snd k) s T.
+Proof.
+  intros k s T H. rewrite <- (app_nil_r s).
+  apply (msteps_gcontent _ _ _ H). simpl. exists []. split; [constructor | reflexivity].
+Qed.
+
+Theorem ipg_machine_equivalence : forall c w t,
+  msteps ([], ([], FNT c)) w ([], ([], FT t)) <-> derives ([], FNT c) w ([], FT t).
+Proof.
+  intros c w t; split.
+  - intro H. apply ipg_lig_equivalence. apply content_nil_nt.
+    exact (ipg_nested_item_completion _ _ _ H).
+  - intro H. exact (derives_to_machine _ _ _ H []).
+Qed.
+
 
 End IPG.
 
@@ -287,6 +428,32 @@ Definition tr (r : lrule) : irule terminal nonterminal index :=
   end.
 
 Definition IP := map tr G.
+
+(* The translations between normal-form LIGs and IPGs are mutually inverse. *)
+Definition untr (r : irule terminal nonterminal index) : lrule :=
+  match r with
+  | IBinP _ _ _ A C B => LInhL A B C
+  | IBinD _ _ _ A C B => LInhR A B C
+  | IPush _ _ _ A i B => LPush A i B
+  | IPop _ _ _ A i B => LPop A i B
+  | IChain _ _ _ A B => LChain A B
+  | ITerm _ _ _ A o => LTerm A o
+  end.
+
+Lemma untr_tr : forall r, untr (tr r) = r.
+Proof. intros []; reflexivity. Qed.
+
+Lemma tr_untr : forall r, tr (untr r) = r.
+Proof. intros []; reflexivity. Qed.
+
+Corollary translations_inverse : forall P,
+  map untr (map tr G) = G /\ map tr (map untr P) = P.
+Proof.
+  intros P; split; rewrite map_map.
+  - transitivity (map (fun x => x) G); [apply map_ext; apply untr_tr | apply map_id].
+  - transitivity (map (fun x => x) P); [apply map_ext; apply tr_untr | apply map_id].
+Qed.
+
 
 Lemma in_IP : forall r, In r G -> In (tr r) IP.
 Proof. intros r H. unfold IP. apply in_map. exact H. Qed.

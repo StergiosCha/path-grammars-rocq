@@ -29,7 +29,7 @@ Notation Leaf := (ExtendedPathGrammars.Leaf vt).
 Notation Node := (ExtendedPathGrammars.Node vt).
 
 Definition RVC : list (rule vt vn) :=
-  [ PRule _ _ vVC vVPc vVC Split; PRule _ _ vVC vVPd vVC Split;
+  [ PRule _ _ vVC vVPc vVC SplitDef; PRule _ _ vVC vVPd vVC SplitDef;
     PRule _ _ vVC vVc vGA Path;   PRule _ _ vVC vVd vGB Path;
     PRule _ _ vVPc vVc vGA Path;  PRule _ _ vVPd vVd vGB Path;
     TRule _ _ vA ta; TRule _ _ vB tb; TRule _ _ vVc tc; TRule _ _ vVd td;
@@ -123,6 +123,8 @@ Proof.
       exists ((nb, al) :: xs). repeat split; try discriminate; simpl; subst;
         rewrite ?map_app; try reflexivity.
       destruct xs; [contradiction | reflexivity].
+  - (* t_splitp: none *)
+    rule_in H.
   - (* t_top *)
     rule_in H; injection H as E1 E2 E3; subst; simpl in *;
       destruct IHtder1 as [E1 [E2 E3]]; subst; intros xs Eg; subst.

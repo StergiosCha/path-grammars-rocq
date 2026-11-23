@@ -3,7 +3,8 @@
 (*                                                                       *)
 (*  A slashed category carries a stack of pending fillers, each with its *)
 (*  term.  Binary rules fix the routing of the filler stack (path, def   *)
-(*  or split), fronting licences may change the category, and gap sites  *)
+(*  split-def or split-path), fronting licences may change the category, *)
+(*  and gap sites                                                         *)
 (*  say which categories may host the gap of which filler.               *)
 (*                                                                       *)
 (*  Checked with Coq 8.18:                                               *)
@@ -31,7 +32,7 @@ Notation Leaf := ExtendedPathGrammars.Leaf.
 Notation Node := ExtendedPathGrammars.Node.
 Notation LinkT := ExtendedPathGrammars.LinkT.
 
-Inductive route : Type := Path | Def | Split.
+Inductive route : Type := Path | Def | SplitDef | SplitPath.
 
 Inductive rule : Type :=
   | PRule : nonterminal -> nonterminal -> nonterminal -> route -> rule
@@ -72,11 +73,17 @@ Inductive derives : item -> list terminal -> item -> Prop :=
       In (PRule A B C Def) R ->
       derives (SCat B g :: X, FCat C []) s c' ->
       derives (X, FCat A g) s c'
-  (* RW1, routing "split": the top filler goes to the deferred daughter,
+  (* RW1, routing "split-def": the top filler goes to the deferred daughter,
      the rest of the stack to the path daughter *)
   | d_split : forall X A B C D al g s c',
-      In (PRule A B C Split) R ->
+      In (PRule A B C SplitDef) R ->
       derives (SCat B [(D, al)] :: X, FCat C g) s c' ->
+      derives (X, FCat A ((D, al) :: g)) s c'
+  (* RW1, routing "split-path": the top filler goes to the path daughter,
+     the rest of the stack to the deferred daughter *)
+  | d_splitp : forall X A B C D al g s c',
+      In (PRule A B C SplitPath) R ->
+      derives (SCat B g :: X, FCat C [(D, al)]) s c' ->
       derives (X, FCat A ((D, al) :: g)) s c'
   (* RW2: scan, plain categories only *)
   | d_rw2 : forall X A a s c',
@@ -123,6 +130,7 @@ Proof.
   - eapply d_path; eauto.
   - eapply d_def; eauto.
   - eapply d_split; eauto.
+  - eapply d_splitp; eauto.
   - simpl. eapply d_rw2; eauto.
   - rewrite <- app_assoc. eapply d_rw3; eauto.
   - rewrite <- app_assoc. eapply d_rw4; eauto.
@@ -177,8 +185,10 @@ Definition nat_rule (r : rule) : list lprod :=
   match r with
   | PRule A B C Path => [LP (LN A) [] LZ (LN C) [] (LN B)]
   | PRule A B C Def => [LP (LN A) [] (LN C) (LN B) [] LZ]
-  | PRule A B C Split =>
+  | PRule A B C SplitDef =>
       map (fun D => LP (LN A) [D] LZ (LN C) [] (LB B D)) allN
+  | PRule A B C SplitPath =>
+      map (fun D => LP (LN A) [D] (LB C D) (LN B) [] LZ) allN
   | TRule A a => [LT (LN A) (Some a)]
   | TopRule A D B => [LP (LN A) [] (LN D) (LN B) [D] LZ]
   | GapRule G D => [LP (LN G) [D] LZ LZ [] LZ]
@@ -297,6 +307,16 @@ Proof.
       [| apply lder_Z | exact HC | apply l_LB; exact HB | reflexivity | reflexivity | reflexivity].
     eapply in_nat_rule; [eassumption |]. simpl.
     apply (in_map (fun D0 => LP (LN A) [D0] LZ (LN C) [] (LB B D0))). apply allN_complete.
+  - (* split-path *)
+    destruct (lders_inv _ _ _ _ (IHderives w Hw)) as [u1 [u2 [E [HC Hr]]]].
+    destruct (lders_inv _ _ _ _ Hr) as [v1 [v2 [E' [HB Hr']]]].
+    rewrite E, E', app_assoc. constructor; [| exact Hr'].
+    eapply l_app with (pop := [D]) (L := LB C D) (B := LN B) (push := []) (Rt := LZ)
+                      (g := map fst g);
+      [| apply l_LB; exact HC | exact HB | apply lder_Z | reflexivity | reflexivity |].
+    + eapply in_nat_rule; [eassumption |]. simpl.
+      apply (in_map (fun D0 => LP (LN A) [D0] (LB C D0) (LN B) [] LZ)). apply allN_complete.
+    + rewrite app_nil_r. reflexivity.
   - (* RW2 *)
     change (a :: s ++ w) with ([a] ++ (s ++ w)).
     constructor; [| exact (IHderives w Hw)].
@@ -436,6 +456,17 @@ Proof.
         exists (Node t1 t2). eapply d_split; [eassumption |].
         eapply derives_trans; [exact K1 |].
         rewrite <- (app_nil_r w3). eapply d_rw3; [exact K2 | apply d_refl].
+      * (* split-path *)
+        apply in_map_iff in Hp. destruct Hp as [D [Hp _]].
+        injection Hp as E1 E2 E3 E4 E5 E6. subst. simpl in *.
+        destruct IHlder3 as [_ E3]. subst. rewrite app_nil_r.
+        intros X gm Hg.
+        destruct (map_fst_cons _ _ _ Hg) as [al [gm' [E Hg']]]. subst gm.
+        destruct (IHlder1 (SCat B1 gm' :: X) [] al eq_refl) as [t1 K1].
+        destruct (IHlder2 [] gm' Hg') as [t2 K2].
+        exists (Node t1 t2). eapply d_splitp; [eassumption |].
+        eapply derives_trans; [exact K1 |].
+        rewrite <- (app_nil_r w2). eapply d_rw3; [exact K2 | apply d_refl].
       * destruct Hp as [Hp | []]; discriminate.
       * (* fronting *)
         destruct Hp as [Hp | []]. injection Hp as E1 E2 E3 E4 E5 E6. subst. simpl in *.
@@ -497,7 +528,10 @@ Inductive tder : nonterminal -> fstack -> list terminal -> term -> Prop :=
       In (PRule A B C Def) R -> tder C [] w1 t1 -> tder B g w2 t2 ->
       tder A g (w1 ++ w2) (Node t1 t2)
   | t_split : forall A B C D al g w1 w2 t1 t2,
-      In (PRule A B C Split) R -> tder C g w1 t1 -> tder B [(D, al)] w2 t2 ->
+      In (PRule A B C SplitDef) R -> tder C g w1 t1 -> tder B [(D, al)] w2 t2 ->
+      tder A ((D, al) :: g) (w1 ++ w2) (Node t1 t2)
+  | t_splitp : forall A B C D al g w1 w2 t1 t2,
+      In (PRule A B C SplitPath) R -> tder C [(D, al)] w1 t1 -> tder B g w2 t2 ->
       tder A ((D, al) :: g) (w1 ++ w2) (Node t1 t2)
   | t_top : forall A D B g al w1 w2 t,
       In (TopRule A D B) R -> tder D [] w1 al -> tder B ((D, al) :: g) w2 t ->
@@ -520,6 +554,9 @@ Proof.
     eapply derives_trans; [apply IHtder1 |].
     rewrite <- (app_nil_r w2). eapply d_rw3; [apply IHtder2 | apply d_refl].
   - eapply d_split; [eassumption |].
+    eapply derives_trans; [apply IHtder1 |].
+    rewrite <- (app_nil_r w2). eapply d_rw3; [apply IHtder2 | apply d_refl].
+  - eapply d_splitp; [eassumption |].
     eapply derives_trans; [apply IHtder1 |].
     rewrite <- (app_nil_r w2). eapply d_rw3; [apply IHtder2 | apply d_refl].
   - eapply d_rw4; [eassumption | apply IHtder1 | apply IHtder2].
@@ -584,6 +621,13 @@ Proof.
     exists (w1 ++ w0), w3, (Node tC tB). repeat split.
     + rewrite E. apply app_assoc.
     + eapply t_split; eauto.
+    + assumption.
+  - (* split-path *)
+    destruct (IHderives w T Hc) as [w1 [w2 [tC [E [HC Hf]]]]].
+    inversion Hf; subst.
+    exists (w1 ++ w0), w3, (Node tC tB). repeat split.
+    + rewrite E. apply app_assoc.
+    + eapply t_splitp; eauto.
     + assumption.
   - (* RW2 *)
     exists [a], (s ++ w), (Leaf a). repeat split.
@@ -673,8 +717,10 @@ Inductive mstep : config -> list terminal -> config -> Prop :=
       mstep (F, (X, FCat A g)) [] (F, (SCat B [] :: X, FCat C g))
   | m_def : forall F X A B C g, In (PRule A B C Def) R ->
       mstep (F, (X, FCat A g)) [] (F, (SCat B g :: X, FCat C []))
-  | m_split : forall F X A B C D al g, In (PRule A B C Split) R ->
+  | m_split : forall F X A B C D al g, In (PRule A B C SplitDef) R ->
       mstep (F, (X, FCat A ((D, al) :: g))) [] (F, (SCat B [(D, al)] :: X, FCat C g))
+  | m_splitp : forall F X A B C D al g, In (PRule A B C SplitPath) R ->
+      mstep (F, (X, FCat A ((D, al) :: g))) [] (F, (SCat B g :: X, FCat C [(D, al)]))
   | m_rw2 : forall F X A a, In (TRule A a) R ->
       mstep (F, (X, FCat A [])) [a] (F, (X, FT (Leaf a)))
   | m_call3 : forall F X B g t,
@@ -718,6 +764,7 @@ Proof.
   - eapply ms_one; [apply m_path; eassumption | apply IHderives].
   - eapply ms_one; [apply m_def; eassumption | apply IHderives].
   - eapply ms_one; [apply m_split; eassumption | apply IHderives].
+  - eapply ms_one; [apply m_splitp; eassumption | apply IHderives].
   - change (a :: s) with ([a] ++ s). eapply ms_step; [apply m_rw2; eassumption | apply IHderives].
   - eapply ms_one; [apply m_call3 |].
     eapply msteps_trans; [apply IHderives1 |].
@@ -778,6 +825,7 @@ Proof.
   - eapply local_lift; [eapply d_path; [exact H0 | apply d_refl] | exact Hg].
   - eapply local_lift; [eapply d_def; [exact H0 | apply d_refl] | exact Hg].
   - eapply local_lift; [eapply d_split; [exact H0 | apply d_refl] | exact Hg].
+  - eapply local_lift; [eapply d_splitp; [exact H0 | apply d_refl] | exact Hg].
   - apply (local_lift _ _ _ (d_rw2 _ _ _ _ _ H0 (d_refl _))). exact Hg.
   - simpl in Hg. destruct Hg as [w1 [w2 [tB [E [Hc Hg]]]]]. subst. simpl.
     eapply gcontent_lift with (s := w1); [| exact Hg].
@@ -989,6 +1037,24 @@ Proof.
       exists (Node t1' t2'). split.
       * simpl. rewrite shift_plug, E1, HB. simpl in E2. rewrite E2. reflexivity.
       * eapply t_split; eauto.
+  - (* t_splitp *)
+    destruct IHtder1 as [kC [PC [EC IC]]]. destruct IHtder2 as [kB [PB [EB IB]]].
+    simpl in PC.
+    assert (HC : forall f fs, plug kC (f :: fs) = plug kC [f]).
+    { intros f fs. change (f :: fs) with ([f] ++ fs). apply plug_prefix.
+      intros n Hn. apply (Permutation_in _ PC) in Hn. destruct Hn as [<- | []]. auto. }
+    exists (CNode kC (shift kB)). repeat split.
+    + simpl. rewrite shift_holes, <- seq_shift.
+      apply Permutation_trans with ([0] ++ map S (holes kB)); [apply Permutation_app_tail; exact PC |].
+      simpl. constructor. apply Permutation_map. exact PB.
+    + simpl. rewrite shift_plug, EB, HC. simpl in EC. rewrite EC. reflexivity.
+    + intros g' Hg. simpl in Hg.
+      destruct (map_fst_cons _ _ _ Hg) as [al' [g0 [E Hg0]]]. subst g'.
+      destruct (IC [(D, al')] eq_refl) as [t1' [E1 K1]].
+      destruct (IB g0 Hg0) as [t2' [E2 K2]].
+      exists (Node t1' t2'). split.
+      * simpl. rewrite shift_plug, E2, HC. simpl in E1. rewrite E1. reflexivity.
+      * eapply t_splitp; eauto.
   - (* t_top *)
     destruct IHtder2 as [kB [PB [EB IB]]].
     exists (close0 kB al). repeat split.
@@ -1126,6 +1192,8 @@ Proof.
     eapply ExtendedPathGrammars.t_sa; [eassumption | apply IHtder1; reflexivity
                                        | apply IHtder2; reflexivity].
   - (* t_split: no split rules *)
+    rename H into Hm. rule_cases Hm.
+  - (* t_splitp: no split rules *)
     rename H into Hm. rule_cases Hm.
   - (* t_top *)
     rename H into Hm. rule_cases Hm. injection Hp as E1 E2 E3. subst. simpl in *.

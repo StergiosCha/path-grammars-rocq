@@ -15,7 +15,7 @@ Five files, using only the standard library:
 - `Doubling.v`: host copying makes structure diverge from the string.
   - The language is a r*, and the term built for a rⁿ has 2ⁿ occurrences of a.
   - Each a rⁿ has exactly one term, and the numbers of a in the expanded yields are exactly the powers of two, which are not ultimately periodic (`unique_output`, `exact_projection`, `not_ultimately_periodic`, contributed by Stergios Chatzikyriakidis).
-- `StackedSlashPathGrammars.v`: stacked-slash Path Grammars (filler stacks, per-rule routing, gap sites, category-changing fronting, LINK).
+- `StackedSlashPathGrammars.v`: stacked-slash Path Grammars (filler stacks, per-rule routing (path, def, split-def, split-path), gap sites, category-changing fronting, LINK).
   - `ssg_lig_equivalence`: every grammar generates exactly the strings of a finite linear indexed grammar G♮ (the upper bound).
   - `ssg_tree_characterisation` and `ssg_item_completion`: the terms built are exactly those of the filled derivations.
   - `tder_nonempty` and `ssg_epsilon_free`: fillers are non-empty and the languages are ε-free.

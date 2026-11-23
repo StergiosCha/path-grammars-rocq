@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this development, please cite the paper and this software."
-title: "Path Grammars: Rocq development"
+title: "Path Grammars: Separating Surface Order from Structure in Incremental Syntax — Rocq development"
 type: software
 license: MIT
 authors:
@@ -13,6 +13,7 @@ authors:
 keywords:
   - path grammars
   - context-free grammars
+  - stacked-slash grammars
   - linear indexed grammars
   - Rocq
   - Coq
